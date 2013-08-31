@@ -2,14 +2,13 @@ package main
 
 import (
 	"code.google.com/p/goauth2/oauth"
-	"flag"
 	"fmt"
 	"github.com/google/go-github/github"
 	"os"
 	"time"
 )
 
-var issuesCmd = &Command{
+var cmdIssues = &Command{
 	UsageLine: "issues [-state open] [-since] [-to]",
 	Short:     "List gihub issues",
 	Long: `
@@ -19,10 +18,14 @@ List gihub issues
 `,
 }
 
-var Org = flag.String("org", "", "Github Organisation you want to query against (ie lincolnloop)")
-var Since = flag.String("since", "", "Since date (ie 2013-07-29T00:00:00Z)")
-var To = flag.String("to", "", "To date (ie 2013-08-09T00:00:00Z)")
-var State = flag.String("state", "", "State  open|close|all")
+var Org = cmdIssues.Flag.String("org", "", "Github Organisation you want to query against (ie lincolnloop)")
+var Since = cmdIssues.Flag.String("since", "", "Since date (ie 2013-07-29T00:00:00Z)")
+var To = cmdIssues.Flag.String("to", "", "To date (ie 2013-08-09T00:00:00Z)")
+var State = cmdIssues.Flag.String("state", "", "State  open|close|all")
+
+func init() {
+	cmdIssues.Run = runIssues
+}
 
 type Page struct {
 	Number  int
@@ -101,8 +104,7 @@ func StringifyIssue(issue github.Issue) string {
 		issue.State, issue.User.Login, issue.Labels, issue.Title)
 }
 
-func runIssues() {
-	flag.Parse()
+func runIssues(cmd *Command, args []string) {
 	since, err := time.Parse(time.RFC3339, *Since)
 	if err != nil {
 		panic("An error occured while parsing the `since` date")

@@ -64,7 +64,7 @@ func (c *Command) Runnable() bool {
 // The order here is the order in which they are printed by 'go help'.
 
 var commands = []*Command{
-	issuesCmd,
+	cmdIssues,
 }
 
 var accessToken string
@@ -97,9 +97,24 @@ func main() {
 	if args[0] == "help" {
 		help(args[1:])
 	}
+	for _, cmd := range commands {
+		if cmd.Name() == args[0] && cmd.Run != nil {
+			cmd.Flag.Usage = func() { cmd.Usage() }
+			if cmd.CustomFlags {
+				args = args[1:]
+			} else {
+				cmd.Flag.Parse(args[1:])
+				args = cmd.Flag.Args()
+			}
+			cmd.Run(cmd, args)
+			os.Exit(exitStatus)
+			return
+		}
+	}
 
-	fmt.Println("Hello World")
-	os.Exit(0)
+	fmt.Fprintf(os.Stderr, "go-github-cli: unknown subcommand %q\nRun 'go help' for usage.\n", args[0])
+	setExitStatus(2)
+	os.Exit(exitStatus)
 }
 
 var usageTemplate = `This is a tool to interact with github from the CLI.
