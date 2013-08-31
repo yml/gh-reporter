@@ -1,134 +1,205 @@
 package main
 
 import (
-	"code.google.com/p/goauth2/oauth"
+	"bytes"
 	"flag"
 	"fmt"
-	"github.com/google/go-github/github"
+	"io"
 	"os"
-	"time"
+	"strings"
+	"sync"
+	"text/template"
+	"unicode"
+	"unicode/utf8"
 )
 
-var Org = flag.String("org", "", "Github Organisation you want to query against (ie lincolnloop)")
-var Since = flag.String("since", "", "Since date (ie 2013-07-29T00:00:00Z)")
-var To = flag.String("to", "", "To date (ie 2013-08-09T00:00:00Z)")
-var State = flag.String("state", "", "State  open|close|all")
+// A Command is an implementation of a go command
+// like go build or go fix.
+type Command struct {
+	// Run runs the command.
+	// The args are the arguments after the command name.
+	Run func(cmd *Command, args []string)
 
-type Page struct {
-	Number  int
-	Next    int
-	Last    int
-	Fetched bool
-	Result  []github.Issue
+	// UsageLine is the one-line usage message.
+	// The first word in the line is taken to be the command name.
+	UsageLine string
+
+	// Short is the short description shown in the 'go help' output.
+	Short string
+
+	// Long is the long message shown in the 'go help <this-command>' output.
+	Long string
+
+	// Flag is a set of flags specific to this command.
+	Flag flag.FlagSet
+
+	// CustomFlags indicates that the command will do its own
+	// flag parsing.
+	CustomFlags bool
 }
 
-type Pager struct {
-	Pages []*Page
+// Name returns the command's name: the first word in the usage line.
+func (c *Command) Name() string {
+	name := c.UsageLine
+	i := strings.Index(name, " ")
+	if i >= 0 {
+		name = name[:i]
+	}
+	return name
 }
 
-func (pager *Pager) Add(page *Page) {
-	pager.Pages = append(pager.Pages, page)
+func (c *Command) Usage() {
+	fmt.Fprintf(os.Stderr, "usage: %s\n\n", c.UsageLine)
+	fmt.Fprintf(os.Stderr, "%s\n", strings.TrimSpace(c.Long))
+	os.Exit(2)
 }
 
-func (pager *Pager) IsFetched() bool {
-	for _, page := range pager.Pages {
-		if page.Fetched {
-			continue
-		} else {
-			return false
-		}
-	}
-	return true
+// Runnable reports whether the command can be run; otherwise
+// it is a documentation pseudo-command such as importpath.
+func (c *Command) Runnable() bool {
+	return c.Run != nil
 }
 
-func fetchPageIssue(client *github.Client, opts github.IssueListOptions, page *Page) (err error) {
-	if err != nil {
-		return err
-	}
+// Commands lists the available commands and help topics.
+// The order here is the order in which they are printed by 'go help'.
 
-	opts.Page = page.Number
-
-	issues, response, err := client.Issues.ListByOrg(*Org, &opts)
-	if err == nil {
-		page.Fetched = true
-		page.Result = issues
-	}
-	page.Next = response.NextPage
-	page.Last = response.LastPage
-	return err
+var commands = []*Command{
+	issuesCmd,
 }
 
-func IssuePager(opts github.IssueListOptions) (pager Pager, err error) {
-	t := &oauth.Transport{
-		Token: &oauth.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-	}
-	client := github.NewClient(t.Client())
-	pager = Pager{}
-	page := &Page{Number: 1}
-	pager.Add(page)
-	err = fetchPageIssue(client, opts, page)
-	if err != nil {
-		return pager, err
-	}
+var accessToken string
+var exitStatus = 0
+var exitMu sync.Mutex
 
-	for i := page.Next; i <= page.Last; i++ {
-		page := &Page{Number: i}
-		pager.Add(page)
-		go func(page *Page) {
-			fetchPageIssue(client, opts, page)
-		}(page)
+func setExitStatus(n int) {
+	exitMu.Lock()
+	if exitStatus < n {
+		exitStatus = n
 	}
-	// Wait until all the Pages are fetched
-	for !pager.IsFetched() {
-		time.Sleep(1 * time.Second)
-	}
-	return pager, nil
+	exitMu.Unlock()
 }
 
-func StringifyIssue(issue github.Issue) string {
-	return fmt.Sprintf("%s #%d %s %s %s %s\n",
-		issue.UpdatedAt.Format(time.RFC822), issue.Number,
-		issue.State, issue.User.Login, issue.Labels, issue.Title)
+func init() {
+	accessToken = os.Getenv("GITHUB_TOKEN")
+
 }
 
 func main() {
+	fmt.Println("Initialising the cli")
+	fmt.Println("AccessToken: ", accessToken)
 	flag.Parse()
-	since, err := time.Parse(time.RFC3339, *Since)
-	if err != nil {
-		panic("An error occured while parsing the `since` date")
-	}
-	to, err := time.Parse(time.RFC3339, *To)
-	if err != nil {
-		panic("An error occured while parsing the `To` date")
+	args := flag.Args()
+	fmt.Println("args: ", args)
+	if len(args) < 1 {
+		usage()
 	}
 
-	// Fetch the issues for the period
-	opts := github.IssueListOptions{
-		Sort:      "updated",
-		Direction: "desc",
-		Filter:    "all",
-		State:     *State,
-		Since:     since,
+	if args[0] == "help" {
+		help(args[1:])
 	}
 
-	pager, err := IssuePager(opts)
-	if err != nil {
-		panic(fmt.Sprintf("An error occured while querying github, %s", err))
+	fmt.Println("Hello World")
+	os.Exit(0)
+}
+
+var usageTemplate = `This is a tool to interact with github from the CLI.
+
+Usage:
+
+	go-gihub-cli command [arguments]
+
+The commands are:
+{{range .}}{{if .Runnable}}
+    {{.Name | printf "%-11s"}} {{.Short}}{{end}}{{end}}
+
+Use "go help [command]" for more information about a command.
+
+Additional help topics:
+{{range .}}{{if not .Runnable}}
+    {{.Name | printf "%-11s"}} {{.Short}}{{end}}{{end}}
+
+Use "go help [topic]" for more information about that topic.
+
+`
+
+var helpTemplate = `{{if .Runnable}}usage: go-github-cli {{.UsageLine}}
+
+{{end}}{{.Long | trim}}
+`
+
+var documentationTemplate = `
+/*
+{{range .}}{{if .Short}}{{.Short | capitalize}}
+
+{{end}}{{if .Runnable}}Usage:
+
+	go-github-cli {{.UsageLine}}
+
+{{end}}{{.Long | trim}}
+
+
+{{end}}*/
+package main
+`
+
+// tmpl executes the given template text on data, writing the result to w.
+func tmpl(w io.Writer, text string, data interface{}) {
+	t := template.New("top")
+	t.Funcs(template.FuncMap{"trim": strings.TrimSpace, "capitalize": capitalize})
+	template.Must(t.Parse(text))
+	if err := t.Execute(w, data); err != nil {
+		panic(err)
+	}
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToTitle(r)) + s[n:]
+}
+
+func printUsage(w io.Writer) {
+	tmpl(w, usageTemplate, commands)
+}
+
+func usage() {
+	printUsage(os.Stderr)
+	os.Exit(2)
+}
+
+// help implements the 'help' command.
+func help(args []string) {
+	if len(args) == 0 {
+		printUsage(os.Stdout)
+		// not exit 2: succeeded at 'go help'.
+		return
+	}
+	if len(args) != 1 {
+		fmt.Fprintf(os.Stderr, "usage: go help command\n\nToo many arguments given.\n")
+		os.Exit(2) // failed at 'go help'
 	}
 
-	issueCount := 0
+	arg := args[0]
 
-	fmt.Printf("####################################\n")
-	fmt.Printf("# %s Issues\n", State)
-	fmt.Printf("####################################\n")
-	for _, page := range pager.Pages {
-		for _, issue := range page.Result {
-			if to.After(*issue.UpdatedAt) {
-				issueCount++
-				fmt.Printf(StringifyIssue(issue))
-			}
+	// 'go help documentation' generates doc.go.
+	if arg == "documentation" {
+		buf := new(bytes.Buffer)
+		printUsage(buf)
+		usage := &Command{Long: buf.String()}
+		tmpl(os.Stdout, documentationTemplate, append([]*Command{usage}, commands...))
+		return
+	}
+
+	for _, cmd := range commands {
+		if cmd.Name() == arg {
+			tmpl(os.Stdout, helpTemplate, cmd)
+			// not exit 2: succeeded at 'go help cmd'.
+			return
 		}
 	}
-	fmt.Println("\n\nSince :", since.Format(time.RFC822),
-		"To", to.Format(time.RFC822), "--", issueCount, "updated", *State, "issues")
+
+	fmt.Fprintf(os.Stderr, "Unknown help topic %#q.  Run 'go help'.\n", arg)
+	os.Exit(2) // failed at 'go help cmd'
 }
