@@ -107,11 +107,15 @@ func StringifyIssue(issue github.Issue) string {
 func runIssues(cmd *Command, args []string) {
 	since, err := time.Parse(time.RFC3339, *Since)
 	if err != nil {
-		panic("An error occured while parsing the `since` date")
+		fmt.Println("An error occured while parsing the `since` date:", err)
+		cmd.Usage()
+		setExitStatus(EXIT_FAILURE)
 	}
 	to, err := time.Parse(time.RFC3339, *To)
 	if err != nil {
-		panic("An error occured while parsing the `To` date")
+		fmt.Println("An error occured while parsing the `To` date:", err)
+		cmd.Usage()
+		setExitStatus(EXIT_FAILURE)
 	}
 
 	// Fetch the issues for the period
@@ -125,14 +129,12 @@ func runIssues(cmd *Command, args []string) {
 
 	pager, err := IssuePager(opts)
 	if err != nil {
-		panic(fmt.Sprintf("An error occured while querying github, %s", err))
+		fmt.Println("An error occured while querying github: ", err)
+		setExitStatus(EXIT_FAILURE)
 	}
 
 	issueCount := 0
 
-	fmt.Printf("####################################\n")
-	fmt.Printf("# %s Issues\n", State)
-	fmt.Printf("####################################\n")
 	for _, page := range pager.Pages {
 		for _, issue := range page.Result {
 			if to.After(*issue.UpdatedAt) {
@@ -141,6 +143,4 @@ func runIssues(cmd *Command, args []string) {
 			}
 		}
 	}
-	fmt.Println("\n\nSince :", since.Format(time.RFC822),
-		"To", to.Format(time.RFC822), "--", issueCount, "updated", *State, "issues")
 }
