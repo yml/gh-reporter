@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/docopt/docopt-go"
 	"github.com/google/go-github/github"
@@ -47,7 +48,7 @@ func NewGithubClient(token string) *github.Client {
 
 func main() {
 	arguments, _ := docopt.ParseDoc(USAGE)
-	// fmt.Println(arguments)
+	fmt.Println(arguments)
 
 	accessToken := os.Getenv("GITHUB_TOKEN")
 	client := NewGithubClient(accessToken)
@@ -64,8 +65,20 @@ func main() {
 			os.Exit(EXITFAILURE)
 		}
 
-	} else if arguments["projects"] == true {
-		fmt.Println("Project snapshot is Not Implmented")
+	} else if arguments["project"] == true {
+		owner := arguments["--owner"].(string)
+		repo := arguments["--repo"].(string)
+		projectID := arguments["--project-id"].(string)
+		columnID, err := strconv.Atoi(arguments["--column-id"].(string))
+		if err != nil {
+			fmt.Printf("An error occured while converting column-id: %v\n", err)
+		}
+
+		err = runProjects(client, owner, repo, projectID, int64(columnID))
+		if err != nil {
+			fmt.Printf("An error occured while retrieving cards in project column: %v\n", err)
+			os.Exit(EXITFAILURE)
+		}
 		os.Exit(EXITFAILURE)
 	}
 	os.Exit(EXITSUCCESS)
