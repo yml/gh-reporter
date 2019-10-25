@@ -34,7 +34,6 @@ func (pc *ProjectCards) FetchCards(client *github.Client) ([]*github.ProjectCard
 	ctx := context.TODO()
 	var allCards []*github.ProjectCard
 	for {
-		fmt.Printf("fetch page: %d\n", opts.Page)
 		cards, resp, err := client.Projects.ListProjectCards(ctx, pc.ColumnID, opts)
 		if err != nil {
 			return nil, fmt.Errorf("can not fetch cards: %w", err)
@@ -55,11 +54,11 @@ func StringifyCard(card github.ProjectCard) string {
 
 }
 
-func runProjects(client *github.Client, owner, repo, projectID string, columnID int64) error {
+func reportCards(client *github.Client, owner, repo, projectID string, columnID int64) error {
 	pc := NewProjectCards(owner, repo, projectID, columnID)
 	cards, err := pc.FetchCards(client)
 	if err != nil {
-		return fmt.Errorf("runProjects %w", err)
+		return fmt.Errorf("reportCards %w", err)
 	}
 	for _, card := range cards {
 		fmt.Println(StringifyCard(*card))

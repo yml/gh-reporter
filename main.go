@@ -18,7 +18,7 @@ const (
 
 Usage:
   gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> --to=<to>) [--state=<state>]
-  gh-reporter project (--owner=<owner> --repo=<repo> --project-id=<project_id> --column-id=<column_id>)
+  gh-reporter cards (--owner=<owner> --repo=<repo> --project-id=<project_id> --column-id=<column_id>)
   gh-reporter -h | --help
   gh-reporter --version
 
@@ -34,6 +34,8 @@ Options:
   --column-id <column_id>  # Column id
 `
 )
+
+var version = "dev"
 
 //NewGithubClient return an initialize Github Client
 func NewGithubClient(token string) *github.Client {
@@ -65,7 +67,7 @@ func main() {
 			os.Exit(EXITFAILURE)
 		}
 
-	} else if arguments["project"] == true {
+	} else if arguments["cards"] == true {
 		owner := arguments["--owner"].(string)
 		repo := arguments["--repo"].(string)
 		projectID := arguments["--project-id"].(string)
@@ -74,12 +76,14 @@ func main() {
 			fmt.Printf("An error occured while converting column-id: %v\n", err)
 		}
 
-		err = runProjects(client, owner, repo, projectID, int64(columnID))
+		err = reportCards(client, owner, repo, projectID, int64(columnID))
 		if err != nil {
 			fmt.Printf("An error occured while retrieving cards in project column: %v\n", err)
 			os.Exit(EXITFAILURE)
 		}
 		os.Exit(EXITFAILURE)
+	} else if arguments["--version"] == true {
+		fmt.Println("version: ", version)
 	}
 	os.Exit(EXITSUCCESS)
 }
