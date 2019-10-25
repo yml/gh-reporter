@@ -1,38 +1,19 @@
 package main
 
 import (
-	"code.google.com/p/goauth2/oauth"
+	"context"
 	"fmt"
-	"github.com/google/go-github/github"
-	"os"
 	"time"
+
+	"github.com/google/go-github/github"
 )
-
-var cmdIssues = &Command{
-	UsageLine: "issues [-state open] [-since] [-to]",
-	Short:     "List gihub issues",
-	Long: `
-List gihub issues
-
-#TODO add more here later
-`,
-}
-
-var Org = cmdIssues.Flag.String("org", "", "Github Organisation you want to query against (ie lincolnloop)")
-var Since = cmdIssues.Flag.String("since", "", "Since date (ie 2013-07-29T00:00:00Z)")
-var To = cmdIssues.Flag.String("to", "", "To date (ie 2013-08-09T00:00:00Z)")
-var State = cmdIssues.Flag.String("state", "", "State  open|close|all")
-
-func init() {
-	cmdIssues.Run = runIssues
-}
 
 type Page struct {
 	Number  int
 	Next    int
 	Last    int
 	Fetched bool
-	Result  []github.Issue
+	Result  []*github.Issue
 }
 
 type Pager struct {
@@ -54,14 +35,56 @@ func (pager *Pager) IsFetched() bool {
 	return true
 }
 
-func fetchPageIssue(client *github.Client, opts github.IssueListOptions, page *Page) (err error) {
+// GhIssues hold the logic to fetch information related to a github project.
+type GhIssues struct {
+	Owner string
+	Repo  string
+	State string
+	Since time.Time
+	To    time.Time
+}
+
+// NewGhIssues creates a pointer to GhIssues
+func NewGhIssues(owner, repo, since, to, state string) (*GhIssues, error) {
+	sinceTime, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		return nil, fmt.Errorf("n error occured while parsing the `since` date %v: %w", since, err)
+	}
+	toTime, err := time.Parse(time.RFC3339, to)
+	if err != nil {
+		return nil, fmt.Errorf("n error occured while parsing the `to` date %v: %w", to, err)
+	}
+	ghi := GhIssues{
+		Owner: owner,
+		Repo:  repo,
+		State: state,
+		Since: sinceTime,
+		To:    toTime,
+	}
+	return &ghi, nil
+
+}
+
+// GetOpts returns the github.IssueListByRepoOptions
+func (ghi *GhIssues) GetOpts() *github.IssueListByRepoOptions {
+	return &github.IssueListByRepoOptions{
+		Sort:      "updated",
+		Direction: "desc",
+		State:     ghi.State,
+		Since:     ghi.Since,
+	}
+
+}
+
+func (ghi *GhIssues) fetchPageIssue(client *github.Client, opts github.IssueListByRepoOptions, page *Page) (err error) {
 	if err != nil {
 		return err
 	}
 
 	opts.Page = page.Number
 
-	issues, response, err := client.Issues.ListByOrg(*Org, &opts)
+	ctx := context.TODO()
+	issues, response, err := client.Issues.ListByRepo(ctx, ghi.Owner, ghi.Repo, &opts)
 	if err == nil {
 		page.Fetched = true
 		page.Result = issues
@@ -71,15 +94,13 @@ func fetchPageIssue(client *github.Client, opts github.IssueListOptions, page *P
 	return err
 }
 
-func IssuePager(opts github.IssueListOptions) (pager Pager, err error) {
-	t := &oauth.Transport{
-		Token: &oauth.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-	}
-	client := github.NewClient(t.Client())
+//IssuePager returns pages of issues
+func (ghi *GhIssues) IssuePager(client *github.Client) (pager Pager, err error) {
 	pager = Pager{}
 	page := &Page{Number: 1}
 	pager.Add(page)
-	err = fetchPageIssue(client, opts, page)
+	opts := ghi.GetOpts()
+	err = ghi.fetchPageIssue(client, *opts, page)
 	if err != nil {
 		return pager, err
 	}
@@ -88,7 +109,7 @@ func IssuePager(opts github.IssueListOptions) (pager Pager, err error) {
 		page := &Page{Number: i}
 		pager.Add(page)
 		go func(page *Page) {
-			fetchPageIssue(client, opts, page)
+			ghi.fetchPageIssue(client, *opts, page)
 		}(page)
 	}
 	// Wait until all the Pages are fetched
@@ -98,49 +119,36 @@ func IssuePager(opts github.IssueListOptions) (pager Pager, err error) {
 	return pager, nil
 }
 
+// StringifyIssue returns a string representation of a github issue
 func StringifyIssue(issue github.Issue) string {
-	return fmt.Sprintf("%s #%d %s %s %s %s\n",
-		issue.UpdatedAt.Format(time.RFC822), issue.Number,
-		issue.State, issue.User.Login, issue.Labels, issue.Title)
+	return fmt.Sprintf("#%d %s %s %s -- %s\n",
+		issue.GetNumber(),
+		issue.UpdatedAt.Format(time.RFC822),
+		issue.GetState(), issue.GetUser().GetLogin(),
+		issue.GetTitle(),
+	)
 }
 
-func runIssues(cmd *Command, args []string) {
-	since, err := time.Parse(time.RFC3339, *Since)
+func runIssues(client *github.Client, owner, repo, since, to, state string) error {
+	ghi, err := NewGhIssues(owner, repo, since, to, state)
 	if err != nil {
-		fmt.Println("An error occured while parsing the `since` date:", err)
-		cmd.Usage()
-		setExitStatus(EXIT_FAILURE)
-	}
-	to, err := time.Parse(time.RFC3339, *To)
-	if err != nil {
-		fmt.Println("An error occured while parsing the `To` date:", err)
-		cmd.Usage()
-		setExitStatus(EXIT_FAILURE)
+		return fmt.Errorf("runIssues: cannot create a NewGhIssues : %w", err)
 	}
 
-	// Fetch the issues for the period
-	opts := github.IssueListOptions{
-		Sort:      "updated",
-		Direction: "desc",
-		Filter:    "all",
-		State:     *State,
-		Since:     since,
-	}
-
-	pager, err := IssuePager(opts)
+	pager, err := ghi.IssuePager(client)
 	if err != nil {
-		fmt.Println("An error occured while querying github: ", err)
-		setExitStatus(EXIT_FAILURE)
+		return fmt.Errorf("runIssues: could not query github: %w", err)
 	}
 
 	issueCount := 0
 
 	for _, page := range pager.Pages {
 		for _, issue := range page.Result {
-			if to.After(*issue.UpdatedAt) {
+			if ghi.To.After(*issue.UpdatedAt) {
 				issueCount++
-				fmt.Printf(StringifyIssue(issue))
+				fmt.Printf(StringifyIssue(*issue))
 			}
 		}
 	}
+	return nil
 }
