@@ -9,15 +9,14 @@ import (
 )
 
 type ProjectCards struct {
-	Owner     string
-	Repo      string
-	ProjectID string
-	ColumnID  int64
+	Owner    string
+	Repo     string
+	ColumnID int64
 }
 
 // NewProjectCards returns a pointer to the ProjectCards
-func NewProjectCards(owner, repo, projectID string, columnID int64) *ProjectCards {
-	return &ProjectCards{owner, repo, projectID, columnID}
+func NewProjectCards(owner, repo string, columnID int64) *ProjectCards {
+	return &ProjectCards{owner, repo, columnID}
 }
 
 // GetOpts return the options
@@ -50,12 +49,14 @@ func (pc *ProjectCards) FetchCards(client *github.Client) ([]*github.ProjectCard
 
 // StringifyCard retuns the string representation of the cards
 func StringifyCard(card github.ProjectCard) string {
-	return fmt.Sprintf("%s, last updated: %s", *card.ContentURL, card.UpdatedAt.Format(time.RFC822))
-
+	if card.ContentURL != nil {
+		return fmt.Sprintf("%s, last updated: %s", *card.ContentURL, card.UpdatedAt.Format(time.RFC822))
+	}
+	return fmt.Sprintf("Note: %s, last updated: %s", *card.Note, card.UpdatedAt.Format(time.RFC822))
 }
 
-func reportCards(client *github.Client, owner, repo, projectID string, columnID int64) error {
-	pc := NewProjectCards(owner, repo, projectID, columnID)
+func reportCards(client *github.Client, owner, repo string, columnID int64) error {
+	pc := NewProjectCards(owner, repo, columnID)
 	cards, err := pc.FetchCards(client)
 	if err != nil {
 		return fmt.Errorf("reportCards %w", err)

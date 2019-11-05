@@ -12,13 +12,16 @@ import (
 )
 
 const (
+	// EXITSUCCESS represents a successful command line program status code.
 	EXITSUCCESS = 0
+	// EXITFAILURE represents the status code for a command line program that failled.
 	EXITFAILURE = 1
-	USAGE       = `Github reporter
+	// USAGE is the documentation for the command line.
+	USAGE = `Github reporter
 
 Usage:
   gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> --to=<to>) [--state=<state>]
-  gh-reporter cards (--owner=<owner> --repo=<repo> --project-id=<project_id> --column-id=<column_id>)
+  gh-reporter cards (--owner=<owner> --repo=<repo> --column-id=<column_id>)
   gh-reporter -h | --help
   gh-reporter --version
 
@@ -70,13 +73,12 @@ func main() {
 	} else if arguments["cards"] == true {
 		owner := arguments["--owner"].(string)
 		repo := arguments["--repo"].(string)
-		projectID := arguments["--project-id"].(string)
 		columnID, err := strconv.Atoi(arguments["--column-id"].(string))
 		if err != nil {
 			fmt.Printf("An error occured while converting column-id: %v\n", err)
 		}
 
-		err = reportCards(client, owner, repo, projectID, int64(columnID))
+		err = reportCards(client, owner, repo, int64(columnID))
 		if err != nil {
 			fmt.Printf("An error occured while retrieving cards in project column: %v\n", err)
 			os.Exit(EXITFAILURE)
