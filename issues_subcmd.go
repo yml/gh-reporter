@@ -40,8 +40,8 @@ type GhIssues struct {
 	Owner string
 	Repo  string
 	State string
-	Since time.Time
-	To    time.Time
+	Since *time.Time
+	To    *time.Time
 }
 
 // NewGhIssues creates a pointer to GhIssues
@@ -50,16 +50,22 @@ func NewGhIssues(owner, repo, since, to, state string) (*GhIssues, error) {
 	if err != nil {
 		return nil, fmt.Errorf("n error occured while parsing the `since` date %v: %w", since, err)
 	}
-	toTime, err := time.Parse(time.RFC3339, to)
-	if err != nil {
-		return nil, fmt.Errorf("n error occured while parsing the `to` date %v: %w", to, err)
+	var ptrToTime *time.Time
+	if to != "" {
+		toTime, err := time.Parse(time.RFC3339, to)
+		if err != nil {
+			return nil, fmt.Errorf("n error occured while parsing the `to` date %v: %w", to, err)
+		}
+		ptrToTime = &toTime
+	} else {
+		ptrToTime = nil
 	}
 	ghi := GhIssues{
 		Owner: owner,
 		Repo:  repo,
 		State: state,
-		Since: sinceTime,
-		To:    toTime,
+		Since: &sinceTime,
+		To:    ptrToTime,
 	}
 	return &ghi, nil
 
@@ -71,7 +77,7 @@ func (ghi *GhIssues) GetOpts() *github.IssueListByRepoOptions {
 		Sort:      "updated",
 		Direction: "desc",
 		State:     ghi.State,
-		Since:     ghi.Since,
+		Since:     *ghi.Since,
 	}
 
 }
@@ -144,7 +150,7 @@ func runIssues(client *github.Client, owner, repo, since, to, state string) erro
 
 	for _, page := range pager.Pages {
 		for _, issue := range page.Result {
-			if ghi.To.After(*issue.UpdatedAt) {
+			if ghi.To == nil || ghi.To.After(*issue.UpdatedAt) {
 				issueCount++
 				fmt.Printf(StringifyIssue(*issue))
 			}

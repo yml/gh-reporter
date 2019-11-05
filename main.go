@@ -20,7 +20,7 @@ const (
 	USAGE = `Github reporter
 
 Usage:
-  gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> --to=<to>) [--state=<state>]
+  gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> ) [--to=<to> --state=<state>]
   gh-reporter cards (--owner=<owner> --repo=<repo> --column-id=<column_id>)
   gh-reporter -h | --help
   gh-reporter --version
@@ -61,7 +61,11 @@ func main() {
 		owner := arguments["--owner"].(string)
 		repo := arguments["--repo"].(string)
 		since := arguments["--since"].(string)
-		to := arguments["--to"].(string)
+		to := ""
+		if arguments["--to"] != nil {
+			to = arguments["--to"].(string)
+		}
+
 		state := arguments["--state"].(string)
 
 		err := runIssues(client, owner, repo, since, to, state)
