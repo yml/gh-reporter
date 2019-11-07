@@ -22,7 +22,7 @@ const (
 	USAGE = `Github reporter
 
 Usage:
-  gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> ) [--to=<to> --state=<state>]
+  gh-reporter issues [(--url=<URL>)|(--owner=<owner> --repo=<repo> )] [--since=<since> --to=<to> --state=<state>]
   gh-reporter cards [(--url=<URL>)|(--owner=<owner> --repo=<repo> --column-id=<column_id>)]
   gh-reporter -h | --help
   gh-reporter --version
@@ -33,8 +33,8 @@ Options:
   --url <URL>  # Github URL (ie https://github.com/yml/gh-reporter/issues)
   --owner <onwer>  # Github owner you want to query against (ie yml or lincolnloop)
   --repo <repo>  # Github repo you want to query against
-  --since <since>  # Since date (ie 2019-07-29T00:00:00Z)
-  --to <to>  # To date (ie 2019-10-29T00:00:00Z)
+  --since <since>  # Since date (ie 2019-07-29T00:00:00Z) [default: ]
+  --to <to>  # To date (ie 2019-10-29T00:00:00Z) [default: ]
   --state <state>  # State  open|closed|all [default: all]
   --project-id <project>  # Project id
   --column-id <column_id>  # Column id
@@ -65,16 +65,36 @@ func main() {
 
 	accessToken := os.Getenv("GITHUB_TOKEN")
 	client := NewGithubClient(accessToken)
-	if arguments["issues"] == true {
-		owner := arguments["--owner"].(string)
-		repo := arguments["--repo"].(string)
-		since := arguments["--since"].(string)
-		to := ""
-		if arguments["--to"] != nil {
-			to = arguments["--to"].(string)
-		}
+	var (
+		owner string
+		repo  string
+		err   error
+		ghURL *url.URL
+	)
 
-		state := arguments["--state"].(string)
+	if arguments["issues"] == true {
+		var (
+			since string
+			to    string
+			state string
+		)
+		if arguments["--url"] != nil {
+			ghURL, err = url.Parse(arguments["--url"].(string))
+			if err != nil {
+				exitWithError("An error occured while parsing the URL: %v\n", err)
+			}
+			if ghURL.Hostname() != "github.com" {
+				exitWithError("An error occured while parsing the URL: %v\n", fmt.Errorf("URL must be on the github.com domain and not: %s", ghURL.Hostname()))
+			}
+
+			fmt.Sscanf(strings.ReplaceAll(ghURL.Path, "/", " "), "%s %s issues", &owner, &repo)
+		} else {
+			owner = arguments["--owner"].(string)
+			repo = arguments["--repo"].(string)
+			since = arguments["--since"].(string)
+			to = arguments["--to"].(string)
+			state = arguments["--state"].(string)
+		}
 
 		err := runIssues(client, owner, repo, since, to, state)
 		if err != nil {
@@ -83,13 +103,9 @@ func main() {
 
 	} else if arguments["cards"] == true {
 		var (
-			owner    string
-			repo     string
 			columnID int
-			err      error
-			ghURL    *url.URL
 		)
-		if arguments["--url"] != "" {
+		if arguments["--url"] != nil {
 			ghURL, err = url.Parse(arguments["--url"].(string))
 			if err != nil {
 				exitWithError("An error occured while parsing the URL: %v\n", err)

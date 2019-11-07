@@ -46,25 +46,30 @@ type GhIssues struct {
 
 // NewGhIssues creates a pointer to GhIssues
 func NewGhIssues(owner, repo, since, to, state string) (*GhIssues, error) {
-	sinceTime, err := time.Parse(time.RFC3339, since)
-	if err != nil {
-		return nil, fmt.Errorf("n error occured while parsing the `since` date %v: %w", since, err)
+	var (
+		ptrSinceTime *time.Time
+		ptrToTime    *time.Time
+	)
+	if since != "" {
+		sinceTime, err := time.Parse(time.RFC3339, since)
+		if err != nil {
+			return nil, fmt.Errorf("An error occured while parsing the `since` date %v: %w", since, err)
+		}
+		ptrSinceTime = &sinceTime
 	}
-	var ptrToTime *time.Time
 	if to != "" {
+		fmt.Println("DEBUG -- to: ", to)
 		toTime, err := time.Parse(time.RFC3339, to)
 		if err != nil {
-			return nil, fmt.Errorf("n error occured while parsing the `to` date %v: %w", to, err)
+			return nil, fmt.Errorf("An error occured while parsing the `to` date %v: %w", to, err)
 		}
 		ptrToTime = &toTime
-	} else {
-		ptrToTime = nil
 	}
 	ghi := GhIssues{
 		Owner: owner,
 		Repo:  repo,
 		State: state,
-		Since: &sinceTime,
+		Since: ptrSinceTime,
 		To:    ptrToTime,
 	}
 	return &ghi, nil
@@ -73,12 +78,15 @@ func NewGhIssues(owner, repo, since, to, state string) (*GhIssues, error) {
 
 // GetOpts returns the github.IssueListByRepoOptions
 func (ghi *GhIssues) GetOpts() *github.IssueListByRepoOptions {
-	return &github.IssueListByRepoOptions{
+	opts := &github.IssueListByRepoOptions{
 		Sort:      "updated",
 		Direction: "desc",
 		State:     ghi.State,
-		Since:     *ghi.Since,
 	}
+	if ghi.Since != nil {
+		opts.Since = *ghi.Since
+	}
+	return opts
 
 }
 
