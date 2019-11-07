@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/docopt/docopt-go"
 	"github.com/google/go-github/github"
@@ -21,13 +23,14 @@ const (
 
 Usage:
   gh-reporter issues (--owner=<owner> --repo=<repo> --since=<since> ) [--to=<to> --state=<state>]
-  gh-reporter cards (--owner=<owner> --repo=<repo> --column-id=<column_id>)
+  gh-reporter cards [(--url=<URL>)|(--owner=<owner> --repo=<repo> --column-id=<column_id>)]
   gh-reporter -h | --help
   gh-reporter --version
 
 Options:
   -h --help  # Show this screen.
   --version  # Show version.
+  --url <URL>  # Github URL (ie https://github.com/yml/gh-reporter/issues)
   --owner <onwer>  # Github owner you want to query against (ie yml or lincolnloop)
   --repo <repo>  # Github repo you want to query against
   --since <since>  # Since date (ie 2019-07-29T00:00:00Z)
@@ -51,6 +54,11 @@ func NewGithubClient(token string) *github.Client {
 	return github.NewClient(tc)
 }
 
+func exitWithError(msgFormat string, err error) {
+	fmt.Printf(msgFormat, err)
+	os.Exit(EXITFAILURE)
+}
+
 func main() {
 	arguments, _ := docopt.ParseDoc(USAGE)
 	fmt.Println(arguments)
@@ -70,24 +78,42 @@ func main() {
 
 		err := runIssues(client, owner, repo, since, to, state)
 		if err != nil {
-			fmt.Printf("An error occured while retrieving github issues: %v\n", err)
-			os.Exit(EXITFAILURE)
+			exitWithError("An error occured while retrieving github issues: %v\n", err)
 		}
 
 	} else if arguments["cards"] == true {
-		owner := arguments["--owner"].(string)
-		repo := arguments["--repo"].(string)
-		columnID, err := strconv.Atoi(arguments["--column-id"].(string))
-		if err != nil {
-			fmt.Printf("An error occured while converting column-id: %v\n", err)
-		}
+		var (
+			owner    string
+			repo     string
+			columnID int
+			err      error
+			ghURL    *url.URL
+		)
+		if arguments["--url"] != "" {
+			ghURL, err = url.Parse(arguments["--url"].(string))
+			if err != nil {
+				exitWithError("An error occured while parsing the URL: %v\n", err)
+			}
+			if ghURL.Hostname() != "github.com" {
+				exitWithError("An error occured while parsing the URL: %v\n", fmt.Errorf("URL must be on the github.com domain and not: %s", ghURL.Hostname()))
+			}
 
+			fmt.Sscanf(strings.ReplaceAll(ghURL.Path, "/", " "), "%s %s projects %s", &owner, &repo)
+			fmt.Sscanf(ghURL.Fragment, "column-%d", &columnID)
+
+		} else {
+			owner = arguments["--owner"].(string)
+			repo = arguments["--repo"].(string)
+			columnID, err = strconv.Atoi(arguments["--column-id"].(string))
+			if err != nil {
+				exitWithError("An error occured while converting column-id: %v\n", err)
+			}
+		}
+		fmt.Println(owner, repo, columnID)
 		err = reportCards(client, owner, repo, int64(columnID))
 		if err != nil {
-			fmt.Printf("An error occured while retrieving cards in project column: %v\n", err)
-			os.Exit(EXITFAILURE)
+			exitWithError("An error occured while retrieving cards in project column: %v\n", err)
 		}
-		os.Exit(EXITFAILURE)
 	} else if arguments["--version"] == true {
 		fmt.Println("version: ", version)
 	}

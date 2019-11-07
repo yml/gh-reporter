@@ -1,4 +1,4 @@
-module github.com/yml/go-github-cli
+module github.com/yml/gh-reporter
 
 go 1.13
 
