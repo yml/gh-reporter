@@ -96,7 +96,7 @@ func main() {
 			state = arguments["--state"].(string)
 		}
 
-		err := runIssues(client, owner, repo, since, to, state)
+		err := reportIssues(client, owner, repo, since, to, state)
 		if err != nil {
 			exitWithError("An error occured while retrieving github issues: %v\n", err)
 		}

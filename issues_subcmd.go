@@ -143,15 +143,15 @@ func StringifyIssue(issue github.Issue) string {
 	)
 }
 
-func runIssues(client *github.Client, owner, repo, since, to, state string) error {
+func reportIssues(client *github.Client, owner, repo, since, to, state string) error {
 	ghi, err := NewGhIssues(owner, repo, since, to, state)
 	if err != nil {
-		return fmt.Errorf("runIssues: cannot create a NewGhIssues : %w", err)
+		return fmt.Errorf("reportIssues: cannot create a NewGhIssues : %w", err)
 	}
 
 	pager, err := ghi.IssuePager(client)
 	if err != nil {
-		return fmt.Errorf("runIssues: could not query github: %w", err)
+		return fmt.Errorf("reportIssues: could not query github: %w", err)
 	}
 
 	issueCount := 0
