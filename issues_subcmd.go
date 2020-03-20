@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/github"
@@ -105,6 +106,7 @@ func (ghi *GhIssues) fetchPageIssue(client *github.Client, opts github.IssueList
 	}
 	page.Next = response.NextPage
 	page.Last = response.LastPage
+
 	return err
 }
 
@@ -135,7 +137,7 @@ func (ghi *GhIssues) IssuePager(client *github.Client) (pager Pager, err error) 
 
 // StringifyIssue returns a string representation of a github issue
 func StringifyIssue(issue github.Issue) string {
-	return fmt.Sprintf("#%d %s %s %s -- %s\n",
+	return fmt.Sprintf("#%d, %s, %s, %s, %s",
 		issue.GetNumber(),
 		issue.UpdatedAt.Format(time.RFC822),
 		issue.GetState(), issue.GetUser().GetLogin(),
@@ -160,9 +162,21 @@ func reportIssues(client *github.Client, owner, repo, since, to, state string) e
 		for _, issue := range page.Result {
 			if ghi.To == nil || ghi.To.After(*issue.UpdatedAt) {
 				issueCount++
-				fmt.Printf(StringifyIssue(*issue))
+				fmt.Println(StringifyIssue(*issue))
 			}
 		}
 	}
 	return nil
+}
+
+//GetIssueFromContentURL returns the Issue corresponding to the content URL
+func GetIssueFromContentURL(client *github.Client, contentURL string) (*github.Issue, error) {
+	ctx := context.TODO()
+	var (
+		owner, repo string
+		number      int
+	)
+	fmt.Sscanf(strings.ReplaceAll(contentURL, "/", " "), "https:  api.github.com repos %s %s issues %d", &owner, &repo, &number)
+	issue, _, err := client.Issues.Get(ctx, owner, repo, number)
+	return issue, err
 }

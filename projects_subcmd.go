@@ -47,7 +47,7 @@ func (pc *ProjectCards) FetchCards(client *github.Client) ([]*github.ProjectCard
 
 }
 
-// StringifyCard retuns the string representation of the cards
+// StringifyCard returns the string representation of the cards
 func StringifyCard(card github.ProjectCard) string {
 	if card.ContentURL != nil {
 		return fmt.Sprintf("%s, last updated: %s", *card.ContentURL, card.UpdatedAt.Format(time.RFC822))
@@ -55,14 +55,27 @@ func StringifyCard(card github.ProjectCard) string {
 	return fmt.Sprintf("Note: %s, last updated: %s", *card.Note, card.UpdatedAt.Format(time.RFC822))
 }
 
-func reportCards(client *github.Client, owner, repo string, columnID int64) error {
+// StringifyCardWithTitle returns the string representation of the card with the title
+func StringifyCardWithTitle(client *github.Client, card github.ProjectCard) string {
+	issue, err := GetIssueFromContentURL(client, card.GetContentURL())
+	if err != nil {
+		return fmt.Sprintf("%s, None", StringifyCard(card))
+	}
+	return fmt.Sprintf("%s, %s", StringifyCard(card), issue.GetTitle())
+}
+
+func reportCards(client *github.Client, owner, repo string, columnID int64, withTitle bool) error {
 	pc := NewProjectCards(owner, repo, columnID)
 	cards, err := pc.FetchCards(client)
 	if err != nil {
 		return fmt.Errorf("reportCards %w", err)
 	}
 	for _, card := range cards {
-		fmt.Println(StringifyCard(*card))
+		if withTitle {
+			fmt.Println(StringifyCardWithTitle(client, *card))
+		} else {
+			fmt.Println(StringifyCard(*card))
+		}
 
 	}
 	return nil

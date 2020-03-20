@@ -23,7 +23,7 @@ const (
 
 Usage:
   gh-reporter issues [(--url=<URL>)|(--owner=<owner> --repo=<repo> )] [--since=<since> --to=<to> --state=<state>]
-  gh-reporter cards [(--url=<URL>)|(--owner=<owner> --repo=<repo> --column-id=<column_id>)]
+  gh-reporter cards [(--url=<URL>)|(--owner=<owner> --repo=<repo> --column-id=<column_id>)] [--title]
   gh-reporter -h | --help
   gh-reporter --version
 
@@ -38,6 +38,7 @@ Options:
   --state <state>  # State  open|closed|all [default: all]
   --project-id <project>  # Project id
   --column-id <column_id>  # Column id
+  --title  # Print out the ticket title
 `
 )
 
@@ -66,11 +67,19 @@ func main() {
 	accessToken := os.Getenv("GITHUB_TOKEN")
 	client := NewGithubClient(accessToken)
 	var (
-		owner string
-		repo  string
-		err   error
-		ghURL *url.URL
+		withTitle bool
+		owner     string
+		repo      string
+		err       error
+		ghURL     *url.URL
 	)
+
+	if arguments["--title"] == true {
+		withTitle = true
+	} else {
+		withTitle = false
+	}
+	fmt.Println(withTitle)
 
 	if arguments["issues"] == true {
 		var (
@@ -126,7 +135,7 @@ func main() {
 			}
 		}
 		fmt.Println(owner, repo, columnID)
-		err = reportCards(client, owner, repo, int64(columnID))
+		err = reportCards(client, owner, repo, int64(columnID), withTitle)
 		if err != nil {
 			exitWithError("An error occured while retrieving cards in project column: %v\n", err)
 		}
